@@ -76,7 +76,4 @@ for_each_network_type(F f)
 pair<network_type, address_type>
 nettype_based_on_address(string const& address);
 
-boost::optional<subaddress_index>
-parse_subaddress_index(string idx_str);
-
 }

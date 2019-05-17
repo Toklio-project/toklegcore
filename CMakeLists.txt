@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 
-set(PROJECT_NAME xmregcore_example)
+set(PROJECT_NAME toklegcore)
 
 project(${PROJECT_NAME})
 
@@ -18,11 +18,11 @@ include(MyUtils)
 find_package(Monero)
 
 add_executable(${PROJECT_NAME}
-        example.cpp)
+        main.cpp)
 
 add_subdirectory(src/)
 
-target_include_directories(myxrmcore
+target_include_directories(mytoklcore
     PUBLIC  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>)
 
 target_link_libraries(${PROJECT_NAME}

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "MicroCore.h"
-#include "Account.h"
 
 #include <tuple>
 #include <utility>
@@ -35,15 +34,8 @@ public:
     BaseIdentifier(
             address_parse_info const* _address,
             secret_key const* _viewkey)
-        : address_info {_address}, viewkey {_viewkey},
-          hwdev {hw::get_device("default")}
+        : address_info {_address}, viewkey {_viewkey}
    {}
-
-   BaseIdentifier(Account* _acc)
-        : BaseIdentifier(&_acc->ai(), &*_acc->vk())
-   {
-       acc = _acc; 
-   }
 
     virtual void identify(transaction const& tx,
                           public_key const& tx_pub_key,
@@ -60,8 +52,6 @@ protected:
     address_parse_info const* address_info {nullptr};
     secret_key const* viewkey {nullptr};
     uint64_t total_xmr {0};
-    Account* acc {nullptr};
-    hw::device& hwdev;
 };
 
 /**
@@ -72,7 +62,10 @@ class Output : public BaseIdentifier
 {
 public:
 
-    using BaseIdentifier::BaseIdentifier;
+    Output(address_parse_info const* _address,
+           secret_key const* _viewkey)
+        : BaseIdentifier(_address, _viewkey)
+    {}
 
     void identify(transaction const& tx,
                   public_key const& tx_pub_key,
@@ -83,6 +76,8 @@ public:
     {
         return identified_outputs;
     }
+
+
 
 
     bool
@@ -102,17 +97,6 @@ public:
         rct::key   rtc_mask;
         rct::key   rtc_amount;
 
-        public_key subaddress_spendkey;
-        subaddress_index subaddr_idx {
-            UINT32_MAX, UINT32_MAX};
-            // the max value means not given
-        
-        bool has_subaddress_index() const
-        {
-            return subaddr_idx.major != UINT32_MAX
-                && subaddr_idx.minor != UINT32_MAX;
-        }
-            
         friend std::ostream& operator<<(std::ostream& os,
                                         info const& _info);
     };
@@ -138,14 +122,6 @@ public:
            known_outputs_t const* _known_outputs,
            AbstractCore const* _mcore)
         : BaseIdentifier(_a, _viewkey),          
-          known_outputs {_known_outputs},
-          mcore {_mcore}
-    {}
-    
-    Input(Account* _acc,
-            known_outputs_t const* _known_outputs,
-           AbstractCore const* _mcore)
-        : BaseIdentifier(_acc),          
           known_outputs {_known_outputs},
           mcore {_mcore}
     {}
@@ -201,10 +177,6 @@ public:
                MicroCore* _mcore)
         : Input(_a, _viewkey, nullptr, _mcore)
     {}
-    
-    GuessInput(Account* _acc, MicroCore* _mcore)
-        : Input(_acc, nullptr, _mcore)
-    {}
 
     void identify(transaction const& tx,
                   public_key const& tx_pub_key,
@@ -232,13 +204,6 @@ public:
         : Input(_a, _viewkey, nullptr, _mcore),
           spendkey {_spendkey}
     {}
-    
-    RealInput(Account* _acc, MicroCore* _mcore)
-        : Input(_acc, nullptr, _mcore)
-    {
-        assert(_acc->sk());
-        spendkey = &(*_acc->sk());
-    }
 
     void identify(transaction const& tx,
                   public_key const& tx_pub_key,
@@ -258,18 +223,10 @@ class PaymentID : public BaseIdentifier
 public:
 
     using payments_t = tuple<crypto::hash, crypto::hash8>;
-    
-    PaymentID()
-        : BaseIdentifier(nullptr, nullptr)
-    {}
 
     PaymentID(address_parse_info const* _address,
               secret_key const* _viewkey)
         : BaseIdentifier(_address, _viewkey)
-    {}
-    
-    PaymentID(Account* _acc)
-        : BaseIdentifier(_acc)
     {}
 
     void identify(transaction const& tx,
@@ -282,34 +239,18 @@ public:
         payment_id_tuple = get_payment_id(tx);
 
         payment_id = std::get<HashT>(payment_id_tuple);
-        
-        //cout << "payment_id_found: " 
-             //<< pod_to_hex(*payment_id) << endl;
 
         // if no payment_id found, return
-        if (*payment_id == null_hash)
-        {
-            payment_id = boost::none;
+        if (payment_id == null_hash || get_viewkey() == nullptr)
             return;
-        }
-        
-        // if no viewkey and we have integrated payment id
-        if (get_viewkey() == nullptr 
-                && sizeof(*payment_id) == sizeof(crypto::hash8))
-        {
-            payment_id = boost::none;
-            return;
-        }
 
         // decrypt integrated payment id. if its legacy payment id
         // nothing will happen.
-        if (!decrypt(*payment_id, tx_pub_key))
+        if (!decrypt(payment_id, tx_pub_key))
         {
             throw std::runtime_error("Cant decrypt pay_id: "
                                      + pod_to_hex(payment_id));
-        }
-
-
+        }                
     }
 
     payments_t
@@ -347,7 +288,7 @@ public:
     {return std::get<HashT>(payment_id_tuple);}
 
 private:
-    boost::optional<HashT> payment_id;
+    HashT payment_id {};
     HashT null_hash {};
     payments_t payment_id_tuple;
 };
@@ -435,14 +376,9 @@ calc_total_xmr(T&& infos)
 inline std::ostream&
 operator<<(std::ostream& os, xmreg::Output::info const& _info)
 {
-    os << _info.idx_in_tx << ", "
-       << pod_to_hex(_info.pub_key) << ", "
-       << _info.amount;
-
-    if (_info.has_subaddress_index())
-        os << ", " << _info.subaddr_idx;
-
-    return os;
+    return os << _info.idx_in_tx << ", "
+              << pod_to_hex(_info.pub_key) << ", "
+              << _info.amount;
 }
 
 inline std::ostream&
@@ -452,17 +388,6 @@ operator<<(std::ostream& os, xmreg::Input::info const& _info)
               << pod_to_hex(_info.out_pub_key) << ", "
               << _info.amount;
 }
-
-template <typename T>
-inline std::ostream&
-operator<<(std::ostream& os, std::vector<T> const& _infos)
-{
-    for (auto&& _info: _infos)
-        os << _info << '\n';
-
-    return os;
-}
-
 
 }
 

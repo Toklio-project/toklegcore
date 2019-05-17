@@ -7,7 +7,7 @@ macro(add_test_target _TEST_NAME)
 
     target_link_libraries(${_TEST_NAME}_tests
             PRIVATE
-            myxrmcore
+            mytoklcore
             gtest gtest_main
             gmock gmock_main
             ${LIBRARIES})
